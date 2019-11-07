@@ -5,7 +5,6 @@ from eventsourcing.domain.model.aggregate import BaseAggregateRoot
 from eventsourcing.domain.model.collection import Collection
 from eventsourcing.domain.model.decorators import attribute
 from eventsourcing.domain.model.entity import VersionedEntity
-from eventsourcing.domain.model.events import EventWithTimestamp
 
 
 SCHOOL_COURSE_COLLECTION_NS = UUID("bdae89e5-9af6-4e07-80fd-19d8adc6c2a6")
@@ -19,15 +18,14 @@ class School(BaseAggregateRoot):
 
     def __init__(self, name=None, **kwargs):
         super(School, self).__init__(**kwargs)
-        self._history = []  # do we need this if we are primarily using the repository?
+        self._history = []
         self._name = name
         self.courses = []
 
     @classmethod
     def open(cls, name):
-        school_id = uuid4()
         return cls.__create__(
-            originator_id=school_id, name=name, event_class=cls.Created
+            name=name, event_class=cls.Created
         )
 
     @property
@@ -37,27 +35,6 @@ class School(BaseAggregateRoot):
     @attribute
     def name(self):
         """A mutable event-sourced attribute."""
-
-    def update_name(self, name):
-        self.__trigger_event__(School.AttributeChanged, value=name, name="_name")
-
-    def update_course_title(self, old_title, new_title):
-        self.__trigger_event__(
-            School.CourseTitleChanged, old_title=old_title, new_title=new_title
-        )
-
-    def add_course(self, course):
-        self.__trigger_event__(School.CourseAdded, course=course)
-
-    def remove_course(self, course):
-        """ Removes course from school """
-        self.__trigger_event__(School.CourseRemoved, course=course)
-
-    def enroll_student(self, course, student):
-        self.__trigger_event__(School.StudentEnrolled, course=course, student=student)
-
-    def withdraw_student(self, course, student):
-        self.__trigger_event__(School.StudentWithdrawn, course=course, student=student)
 
     class Event(BaseAggregateRoot.Event):
         pass
@@ -76,6 +53,10 @@ class School(BaseAggregateRoot):
         def school_id(self):
             return self.__dict__["originator_id"]
 
+    # Update school name command and event
+    def update_name(self, name):
+        self.__trigger_event__(School.AttributeChanged, value=name, name="_name")
+
     class AttributeChanged(Event, BaseAggregateRoot.AttributeChanged):
         """Published when a school changes its name."""
 
@@ -83,7 +64,11 @@ class School(BaseAggregateRoot):
             obj._name = self.value
             obj._history.append(self)
 
-    class CourseAdded(Event, EventWithTimestamp):
+    # Add a course command and event
+    def add_course(self, course):
+        self.__trigger_event__(School.CourseAdded, course=course)
+
+    class CourseAdded(Event):
         """Published when a course is added to a school."""
 
         @property
@@ -98,21 +83,40 @@ class School(BaseAggregateRoot):
             obj.courses.append(self.course.title)
             obj._history.append(self)
 
-    class CourseRemoved(Event, EventWithTimestamp):
+    # Remove a course command and event
+    def remove_course(self, course):
+        """ Removes course from school """
+        self.__trigger_event__(School.CourseRemoved, course=course)
+
+    class CourseRemoved(Event):
         def mutate(self, obj):
             obj.courses.remove(self.course.title)
             obj._history.append(self)
 
-    class CourseTitleChanged(Event, EventWithTimestamp):
+    # Update a course title command and event
+    def update_course_title(self, old_title, new_title):
+        self.__trigger_event__(
+            School.CourseTitleChanged, old_title=old_title, new_title=new_title
+        )
+
+    class CourseTitleChanged(Event):
         def mutate(self, obj):
             obj.courses.remove(self.old_title.title)
             obj.courses.append(self.new_title)
 
-    class StudentEnrolled(Event, EventWithTimestamp):
+    # Enroll a student command and event
+    def enroll_student(self, course, student):
+        self.__trigger_event__(School.StudentEnrolled, course=course, student=student)
+
+    class StudentEnrolled(Event):
         def mutate(self, obj):
             obj._history.append(self)
 
-    class StudentWithdrawn(Event, EventWithTimestamp):
+    # Withdraw a student command and event
+    def withdraw_student(self, course, student):
+        self.__trigger_event__(School.StudentWithdrawn, course=course, student=student)
+
+    class StudentWithdrawn(Event):
         def mutate(self, obj):
             obj._history.append(self)
 
@@ -132,34 +136,36 @@ class Course(VersionedEntity):
         """
         The title of the course (an event-sourced attribute)
         """
-
-    def update_name(self, name):
-        self.__trigger_event__(Course.AttributeChanged, value=name, name="_title")
-
-    def add_student(self, student_name):
-        self.__trigger_event__(Course.StudentAdded, value=student_name)
-
-    def remove_student(self, student_name):
-        self.__trigger_event__(Course.StudentRemoved, value=student_name)
-
     class Event(VersionedEntity.Event):
         pass
 
-    class Created(VersionedEntity.Created):
+    class Created(Event, VersionedEntity.Created):
         pass
 
-    class Discarded(VersionedEntity.Discarded):
+    class Discarded(Event, VersionedEntity.Discarded):
         pass
 
-    class AttributeChanged(VersionedEntity.AttributeChanged):
+    # Update a course title command and event
+    def update_name(self, name):
+        self.__trigger_event__(Course.AttributeChanged, value=name, name="_title")
+
+    class AttributeChanged(Event, VersionedEntity.AttributeChanged):
         def mutate(self, obj):
             obj._title = self.value
 
-    class StudentAdded(VersionedEntity.Event):
+    # Add student to course command and event
+    def add_student(self, student_name):
+        self.__trigger_event__(Course.StudentAdded, value=student_name)
+
+    class StudentAdded(Event):
         def mutate(self, obj):
             obj.students.append(self.value)
 
-    class StudentRemoved(VersionedEntity.Event):
+    # Remove student from course command and event
+    def remove_student(self, student_name):
+        self.__trigger_event__(Course.StudentRemoved, value=student_name)
+
+    class StudentRemoved(Event):
         def mutate(self, obj):
             obj.students.remove(self.value)
 
@@ -176,22 +182,19 @@ class Student(VersionedEntity):
     class Event(VersionedEntity.Event):
         pass
 
-    class Created(VersionedEntity.Created):
+    class Created(Event, VersionedEntity.Created):
         pass
 
-    class Discarded(VersionedEntity.Discarded):
+    class Discarded(Event, VersionedEntity.Discarded):
         pass
 
 
 # Test application
 class SchoolApplication(SQLAlchemyApplication):
-    persist_event_type = (School.Event, Course.Event, Collection.Event)
+    persist_event_type = (School.Event, Course.Event, Student.Event)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.active_courses_projection_policy = ActiveCoursesProjectionPolicy(
-            self.repository
-        )
 
     @staticmethod
     def open_school(name):
@@ -247,29 +250,6 @@ class SchoolApplication(SQLAlchemyApplication):
         school.withdraw_student(course, student)
         school.__save__()
         course.remove_student(student.full_name)
-
-
-# Projections
-class ActiveCoursesProjectionPolicy(object):
-    """
-    Updates the list of courses whenever a course is added or removed.
-    """
-
-    def __init__(self, repository):
-        self.repository = repository
-
-    def close_school(self):
-        pass
-
-    def is_school_created(self, event):
-        if isinstance(event, (list, tuple)):
-            return all(map(self.is_school_created, event))
-        return isinstance(event, School.Created)
-
-    def is_school_closed(self, event):
-        if isinstance(event, (list, tuple)):
-            return all(map(self.is_school_closed, event))
-        return isinstance(event, School.Discarded)
 
 
 def make_school_course_collection_id(
