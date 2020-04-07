@@ -8,7 +8,7 @@ verify_ssl = true
 [packages]
 psycopg2 = "<3.0,>=2.7"
 eventsourcing = {extras = ["sqlalchemy"],version = "*"}
-Django = "<3.0,>=2.0"
+Django = ">=3.0.3"
 black = "*"
 
 [requires]
